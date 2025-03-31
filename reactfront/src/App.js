@@ -3,9 +3,27 @@ import init, { next_beta_reduction_wasm } from './lambdawasm';
 
 function App() {
   const [expression, setExpression] = useState('(λx.x) y');
+  const [rawExpression, setRawExpression] = useState('');
+  const [answer, setAnswer] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [savedExpressions, setSavedExpressions] = useState({});
+  const [savedExpressions, setSavedExpressions] = useState({
+    '0': '(λf.λx.x)',
+    '1': '(λf.λx.f x)',
+    '2': '(λf.λx.f (f x))',
+    '3': '(λf.λx.f (f (f x)))',
+    'SUCC': '(λn.λf.λx.f (n f x))',
+    'PRED': '(λn.λf.λx.n (λg.λh.h (g f)) (λu.x) (λu.u))',
+    'TRUE': '(λx.λy.x)',
+    'FALSE': '(λx.λy.y)',
+    'IF': '(λp.λa.λb.p a b)',
+    'AND': '(λp.λq.p q FALSE)',
+    'OR': '(λp.λq.p TRUE q)',
+    'NOT': '(λp.λa.λb.p b a)',
+    'ISZERO': '(λn.n (λx.FALSE) TRUE)',
+    'ISNUM': '(λn.n (λx.TRUE) FALSE)',
+    'ISBOOLEAN': '(λb.b TRUE FALSE)',
+  });
   const [newExpressionName, setNewExpressionName] = useState('');
   const [newExpressionValue, setNewExpressionValue] = useState('');
   const [history, setHistory] = useState([]);
@@ -27,7 +45,6 @@ function App() {
       });
   }, []);
 
-  // Save expressions to localStorage whenever they change
   useEffect(() => {
     if (Object.keys(savedExpressions).length > 0) {
       localStorage.setItem('savedExpressions', JSON.stringify(savedExpressions));
@@ -37,11 +54,12 @@ function App() {
   const handleBetaReduce = () => {
     try {
       const replacedExpression = replaceNamedExpressions(expression);
-      const result = next_beta_reduction_wasm(replacedExpression);
-      if (result === expression) {
+      let result = next_beta_reduction_wasm(replacedExpression);
+      if (result === expression || expression === convertToSavedExpression(result)) {
         setError("No further reduction possible.");
         return;
       }
+      result = convertToSavedExpression(result);
       setHistory([...history, { from: expression, to: result }]);
       setExpression(result);
       setError(null);
@@ -50,6 +68,17 @@ function App() {
       setError("Error: " + err);
     }
   };
+
+  // Convert beta-normal form in the language of saved expressions
+  const convertToSavedExpression = (expr) => {
+    for (const [name, value] of Object.entries(savedExpressions)) {
+      let v = value.replace(/^\((.*)\)$/, '$1');
+      if (expr.includes(v)) {
+        expr = expr.replace(v, name);
+      }
+    }
+    return expr;
+  }
 
   const saveExpression = () => {
     if (!newExpressionName.trim() || !newExpressionValue.trim()) {
@@ -82,6 +111,23 @@ function App() {
     });
     return result;
   };
+
+  useEffect(() => {
+    const replacedExpression = replaceNamedExpressions(expression);
+    setRawExpression(replacedExpression);
+    let ans = replacedExpression;
+    try {
+      let next = next_beta_reduction_wasm(replacedExpression);
+      while (next !== ans) {
+        ans = next;
+        next = next_beta_reduction_wasm(ans);
+      }
+      setAnswer(ans);
+    } catch (err) {
+      console.error(err);
+    }
+    
+  }, [expression]);
 
   const applyExpression = (expr) => {
     setExpression(expr);
@@ -132,7 +178,6 @@ function App() {
           </button>
         </div>
         
-        {/* List of saved expressions */}
         <div style={styles.expressionsList}>
           {Object.entries(savedExpressions).length === 0 ? (
             <p style={styles.noExpressions}>No saved expressions yet.</p>
@@ -161,11 +206,9 @@ function App() {
         </div>
       </div>
       
-      {/* Main content */}
       <div style={styles.mainContent}>
         <h1 style={styles.mainTitle}>Lambda Playground</h1>
         
-        {/* Expression input */}
         <div style={styles.inputContainer}>
           <label htmlFor="expression" style={styles.label}>
             Enter Lambda Expression:
@@ -179,16 +222,22 @@ function App() {
             style={styles.textarea}
           />
         </div>
+        {rawExpression!==expression && <div style={styles.rawExpression}>
+          raw: {rawExpression}
+        </div>}
+        {answer && (
+          <div style={styles.rawExpression}>
+            result: {answer} {convertToSavedExpression(answer)!==answer ?  '= ' +convertToSavedExpression(answer) : ''}
+          </div>
+        )}
         
-        {/* Beta reduction button */}
         <button
           onClick={handleBetaReduce}
           style={styles.betaReduceButton}
         >
-          Beta Reduce
+          β-Reduce
         </button>
         
-        {/* Error display */}
         {error && (
           <div style={styles.errorBox}>
             {error}
@@ -328,7 +377,14 @@ const styles = {
     color: '#333',
   },
   inputContainer: {
-    marginBottom: '24px',
+    
+  },
+  rawExpression: {
+    fontFamily: 'monospace',
+    fontSize: '14px',
+    color: '#666',
+    marginTop: '4px',
+    marginBottom: '16px',
   },
   label: {
     display: 'block',
