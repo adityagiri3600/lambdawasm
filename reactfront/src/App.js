@@ -18,6 +18,8 @@ function App() {
     'FALSE': '(λx.λy.y)',
     'IF': '(λp.λa.λb.p a b)',
     'AND': '(λp.λq.p q FALSE)',
+    'MULT': '(λm.λn.λf.m (n f))',
+    'EXP' : '(λm.λn.n m)',
     'OR': '(λp.λq.p TRUE q)',
     'NOT': '(λp.λa.λb.p b a)',
     'ISZERO': '(λn.n (λx.FALSE) TRUE)',
@@ -211,15 +213,21 @@ function App() {
         
         <div style={styles.inputContainer}>
           <label htmlFor="expression" style={styles.label}>
-            Enter Lambda Expression:
+            Enter Lambda Expression: (type "lambda" for λ)
           </label>
           <textarea
             id="expression"
             value={expression}
-            onChange={(e) => setExpression(e.target.value)}
+            onChange={(e) => setExpression(e.target.value.replace(/lambda/g, 'λ'))}
             rows={4}
             placeholder="Enter a lambda expression, e.g., (λx.x) y"
             style={styles.textarea}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleBetaReduce();
+              }
+            }}
           />
         </div>
         {rawExpression!==expression && <div style={styles.rawExpression}>
